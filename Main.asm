@@ -85,8 +85,8 @@
                 dc.l Reserv3F
                 dc.l Reserv3F
                 dc.l Reserv3F
-ConsoleName:    dc.b 'SEGA GENESIS    ' ; DATA XREF: ROM:000002F4   r
-                                        ; ROM:000002FA   r
+ConsoleName:    dc.b 'SEGA GENESIS    ' ; DATA XREF: MainCode+4   r
+                                        ; MainCode+A   r ...
 CopyRight:      dc.b '(C)SEGA 1990.MAY'
 DomesticName:   dc.b 'GENESIS OS                                      '
 OverseasName:   dc.b 'GENESIS OS                                      '
@@ -151,7 +151,7 @@ loc_25C:                                ; CODE XREF: Reset+5C   j
 loc_264:                                ; CODE XREF: Reset+66   j
                 move.b  (a5)+,$11(a3)
                 dbf     d5,loc_264
-                bra.s   loc_2AA
+                bra.s   Init
 ; ---------------------------------------------------------------------------
 SetupValues:    dc.w 0                  ; DATA XREF: Reset   o
                 dc.w $8000
@@ -192,50 +192,56 @@ PSGInitValues:  dc.b $9F
                 dc.b $DF
                 dc.b $FF
 ; ---------------------------------------------------------------------------
-loc_2AA:                                ; CODE XREF: Reset+6A   j
-                lea     (unk_FFC000).w,a0
-                lea     aSege(pc),a1    ; " SEGE"
+Init:                                   ; CODE XREF: Reset+6A   j
+                lea     (Load_Value_In_Ram).w,a0
+                lea     RegTable(pc),a1 ; " SEG"
                 movem.l (a1)+,d4-d7/a2-a6
                 move.w  #$3F,d0 ; '?'
-loc_2BA:                                ; CODE XREF: Reset+BA   j
+WriteProgram:                           ; CODE XREF: Reset+BA   j
                 move.w  (a1)+,(a0)+
-                dbf     d0,loc_2BA
-                jsr     (unk_FFC000).w
-loc_2C4:                                ; CODE XREF: Reset:loc_2C4   j
-                bra.s   loc_2C4
+                dbf     d0,WriteProgram
+                jsr     Load_Value_In_Ram
+Inf_Loop:                               ; CODE XREF: Reset:Inf_Loop   j
+                bra.s   Inf_Loop
 ; End of function Reset
 ; ---------------------------------------------------------------------------
-aSege:          dc.b ' SEGE'            ; DATA XREF: Reset+AC   o
-                dc.b $94, 0, 3, 0, 0, 0, $F7
-aSega:          dc.b 'SEGA'
-                dc.b 0, $A1, $40, 0, 0, $A1, $41, 1, 0, $C0, 0, 4, 0, $C0
-                dc.b 0, 0, 0, $A1, 0, 1, 8, $D3, 0, 0, $BE, $B8
-; ---------------------------------------------------------------------------
-loc_2F0:
-                btst    d0,d0
-                beq.s   loc_316
-                cmp.l   (ConsoleName).w,d4 ; "SEGA GENESIS    "
-                bne.s   loc_302
-                cmpi.b  #$41,(ConsoleName+4).w ; 'A' ; " GENESIS    "
-                beq.s   loc_316
-loc_302:                                ; CODE XREF: ROM:000002F8   j
+RegTable:       dc.b ' SEG'             ; DATA XREF: Reset+AC   o
+                dc.l $45940003
+                dc.l $F7
+                dc.b 'SEGA'
+                dc.l IO_TMSS
+                dc.l $A14101
+                dc.l VDP_CTRL
+                dc.l VDP_DATA
+                dc.l $A10001
+
+
+MainCode:
+                bset    #0,(a3)
+                cmp.l   (ConsoleName).w,d7 ; Check "SEGA"
+                beq.s   SecurityPass
+                cmp.l   (ConsoleName).w,d4 ; Check SEG
+                bne.s   SecurityFail
+                cmpi.b  #'A',(ConsoleName+4).w ; Check A
+                beq.s   SecurityPass
+SecurityFail:                           ; CODE XREF: MainCode+E   j
                 bclr    #0,(a3)
                 move.b  (a6),d0
                 andi.b  #$F,d0
                 beq.s   locret_314
                 move.l  #0,(a2)
-locret_314:                             ; CODE XREF: ROM:0000030C   j
+locret_314:                             ; CODE XREF: MainCode+22   j
                 rts
 ; ---------------------------------------------------------------------------
-loc_316:                                ; CODE XREF: ROM:000002F2   j
-                                        ; ROM:00000300   j
+SecurityPass:                           ; CODE XREF: MainCode+8   j
+                                        ; MainCode+16   j
                 bclr    #0,(a3)
-                jsr     (loc_78C).l
+                jsr     (PalLoad).l
                 move.l  #$4C200000,(a4)
-loc_326:                                ; CODE XREF: ROM:00000328   j
+WriteText:                              ; CODE XREF: MainCode+3E   j
                 move.l  (a1)+,(a5)
-                dbf     d6,loc_326
-                jsr     (loc_79C).l
+                dbf     d6,WriteText
+                jsr     (ShowText).l
                 move.w  #$8144,(a4)
                 move.w  #$3C,d0 ; '<'
                 bsr.s   loc_35C
@@ -244,15 +250,16 @@ loc_326:                                ; CODE XREF: ROM:00000328   j
                 andi.b  #$F,d0
                 beq.s   loc_34E
                 move.l  #0,(a2)
-loc_34E:                                ; CODE XREF: ROM:00000346   j
+loc_34E:                                ; CODE XREF: MainCode+5C   j
                 bset    #0,(a3)
                 moveq   #0,d0
                 movea.l d0,a0
                 movea.l (a0)+,sp
                 movea.l (a0)+,a0
                 jmp     (a0)
+; End of function MainCode
 ; ---------------------------------------------------------------------------
-loc_35C:                                ; CODE XREF: ROM:0000033A   p
+loc_35C:                                ; CODE XREF: MainCode+50   p
                                         ; ROM:00000364   j
                 move.w  #$95CE,d1
 loc_360:                                ; CODE XREF: ROM:loc_360   j
@@ -264,39 +271,42 @@ TMSS_Font_Palette:incbin "Art/Pal/TMSS_Font_Palette.pal"
                 even
 TMSS_Font:      incbin "Art/Unc/TMSS_Font.unc"
                 even
-aProducedByOr:  dc.b '   produced by or'
+                dc.b '   produced by or'
                 dc.b $FF
-aUnderLicenseFr:dc.b ' under license from'
+                dc.b ' under license from'
                 dc.b $FF
-aSegaEnterprise:dc.b 'sega,enterprises ltd'
-                dc.b $7B ; {
+                dc.b 'sega,enterprises ltd{'
                 dc.b   0
-; ---------------------------------------------------------------------------
-loc_78C:                                ; CODE XREF: ROM:0000031A   p
+
+
+PalLoad:                                ; CODE XREF: MainCode+30   p
                 move.w  (a1)+,d0
                 move.l  #$C0020000,(a4)
-loc_794:                                ; CODE XREF: ROM:00000796   j
+PalLoad_Colors:                         ; CODE XREF: PalLoad+A   j
                 move.w  (a1)+,(a5)
-                dbf     d0,loc_794
+                dbf     d0,PalLoad_Colors
                 rts
-; ---------------------------------------------------------------------------
-loc_79C:                                ; CODE XREF: ROM:0000032C   p
-                                        ; ROM:000007B2   j
+; End of function PalLoad
+
+
+ShowText:                               ; CODE XREF: MainCode+42   p
+                                        ; ShowText+16   j
                 move.l  d5,(a4)
-loc_79E:                                ; CODE XREF: ROM:000007AA   j
+loc_79E:                                ; CODE XREF: ShowText+E   j
                 moveq   #0,d1
                 move.b  (a1)+,d1
                 bmi.s   loc_7AC
                 bne.s   loc_7A8
                 rts
 ; ---------------------------------------------------------------------------
-loc_7A8:                                ; CODE XREF: ROM:000007A4   j
+loc_7A8:                                ; CODE XREF: ShowText+8   j
                 move.w  d1,(a5)
                 bra.s   loc_79E
 ; ---------------------------------------------------------------------------
-loc_7AC:                                ; CODE XREF: ROM:000007A2   j
+loc_7AC:                                ; CODE XREF: ShowText+6   j
                 addi.l  #$1000000,d5
-                bra.s   loc_79C
+                bra.s   ShowText
+; End of function ShowText
 ; ---------------------------------------------------------------------------
 Padding:        dc.b $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
                 dc.b $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
